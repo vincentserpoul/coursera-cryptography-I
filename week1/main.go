@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"unicode"
 )
 
 func main() {
@@ -26,7 +27,87 @@ func main() {
 	if errM != nil {
 		log.Fatal(errM)
 	}
+	fmt.Printf("%s\n", mysteryCTX)
 
+	cX := decodeStringAll(cs)
+	mms := xorAllWithAll(cX)
+
+	for i, mm := range mms {
+		for j := 0; j < len(cX[i]); j++ {
+			// fmt.Printf("%d: ", j)
+			hexes := listAllxorAtPosition(mm, j)
+			// for _, h := range hexes {
+			// 	fmt.Printf("%x ", h)
+			// }
+			char := processPosition(hexes)
+			// if err != nil {
+			// 	log.Fatalf("%v %d %d\n", err, i, j)
+			// }
+			// fmt.Printf(" >> %s \n", char)
+			fmt.Printf("%s", char)
+		}
+		fmt.Println()
+	}
+
+	// We have found one sentence
+	key := make([]byte, len(cX[1]))
+	_ = safeXORBytes(key, cX[1], []byte("Euler would probably enjoy that now his theorem becomes a corner stone of crypto - Anonymous on Euler's theorem"))
+	secret := make([]byte, len(mysteryCTX))
+	_ = safeXORBytes(secret, key, mysteryCTX)
+	fmt.Println(string(secret))
+}
+
+func processPosition(hs []byte) string {
+	// Case when all xors are all different letters or NULL
+	// it means the letter at this position is a space
+	// if it's control chats or the same letter
+	// it means the letter at this position is a letter, opposite case
+	isLetter := 0
+	mostPossibleLetter := make(map[string]int)
+	for _, h := range hs {
+		if unicode.IsLetter(rune(h)) || h == 0x00 {
+			isLetter++
+		}
+		if unicode.IsLetter(rune(h)) {
+			mostPossibleLetter[string(h)]++
+		}
+	}
+
+	// fmt.Println("L", isLetter, len(hs), "L")
+	// If all are mostly letters, then it's a space
+	if isLetter > len(hs)-2 {
+		return " "
+	}
+
+	var selectedLetter string
+	var maxCount int
+
+	// Find the most common letter
+	for char, count := range mostPossibleLetter {
+		if count > maxCount {
+			selectedLetter = char
+			maxCount = count
+		}
+	}
+
+	if selectedLetter == "" {
+		return "_"
+	}
+
+	return selectedLetter
+}
+
+func listAllxorAtPosition(xorMsgs [][]byte, i int) []byte {
+	var hexes []byte
+	for _, msg := range xorMsgs {
+		if i < len(msg) {
+			hexes = append(hexes, msg[i])
+		}
+	}
+	return hexes
+}
+
+func decodeStringAll(cs []string) [][]byte {
 	var cX [][]byte
 	for _, c := range cs {
 		decoded, err := hex.DecodeString(c)
@@ -35,7 +116,36 @@ func main() {
 		}
 		cX = append(cX, decoded)
 	}
+	return cX
+}
 
-	fmt.Printf("% X\n", mysteryCTX)
+func xorAllWithAll(cX [][]byte) [][][]byte {
+	var m [][][]byte
+	for i := range cX {
+		var mx [][]byte
+		for j := range cX {
+			if j != i {
+				minLen := len(cX[i])
+				if len(cX[j]) < len(cX[i]) {
+					minLen = len(cX[j])
+				}
+				xors01 := make([]byte, minLen)
+				_ = safeXORBytes(xors01, cX[i], cX[j])
+				mx = append(mx, xors01)
+			}
+		}
+		m = append(m, mx)
+	}
+	return m
+}
 
+func safeXORBytes(dst, a, b []byte) int {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		dst[i] = a[i] ^ b[i]
+	}
+	return n
 }
